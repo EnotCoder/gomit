@@ -100,7 +100,6 @@ class ProjectManager : public Control {
 
 	enum MainViewTab {
 		MAIN_VIEW_PROJECTS,
-		MAIN_VIEW_ASSETLIB,
 		MAIN_VIEW_MAX
 	};
 
@@ -116,12 +115,10 @@ class ProjectManager : public Control {
 	void _select_main_view(int p_id);
 
 	VBoxContainer *local_projects_vb = nullptr;
-	EditorAssetLibrary *asset_library = nullptr;
 
 	EditorAbout *about_dialog = nullptr;
 
 	void _show_about();
-	void _open_asset_library_confirmed();
 	void _project_list_menu_option(int p_option);
 
 	AcceptDialog *error_dialog = nullptr;
@@ -142,8 +139,6 @@ class ProjectManager : public Control {
 	RichTextLabel *empty_list_message = nullptr;
 	Button *empty_list_create_project = nullptr;
 	Button *empty_list_import_project = nullptr;
-	Button *empty_list_open_assetlib = nullptr;
-	Label *empty_list_online_warning = nullptr;
 
 	void _update_list_placeholder();
 
@@ -167,7 +162,6 @@ class ProjectManager : public Control {
 	Button *manage_tags_btn = nullptr;
 	Button *erase_btn = nullptr;
 	Button *erase_missing_btn = nullptr;
-	Button *donate_btn = nullptr;
 
 	HBoxContainer *open_btn_container = nullptr;
 	PopupMenu *open_options_popup = nullptr;
@@ -208,7 +202,6 @@ class ProjectManager : public Control {
 	void _update_project_buttons();
 	void _open_options_popup();
 	void _open_recovery_mode_ask(bool manual = false);
-	void _open_donate_page();
 
 	void _on_project_created(const String &dir, bool edit);
 	void _on_project_duplicated(const String &p_original_path, const String &p_duplicate_path, bool p_edit);
