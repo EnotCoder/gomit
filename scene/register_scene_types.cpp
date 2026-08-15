@@ -256,6 +256,7 @@
 #include "scene/3d/modifier_bone_target_3d.h"
 #include "scene/3d/multimesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
+#include "scene/3d/scatter_painter_3d.h"
 #include "scene/3d/occluder_instance_3d.h"
 #include "scene/3d/path_3d.h"
 #include "scene/3d/reflection_probe.h"
@@ -744,6 +745,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(ShapeCast3D);
 #endif // PHYSICS_3D_DISABLED
 	GDREGISTER_CLASS(MultiMeshInstance3D);
+	GDREGISTER_CLASS(ScatterPainter3D);
 
 	GDREGISTER_CLASS(Curve3D);
 	GDREGISTER_CLASS(Path3D);
