@@ -66,6 +66,32 @@ class ScatterPainterEditor : public Control {
 	Button *paint_button = nullptr;
 	Button *erase_button = nullptr;
 
+	void _set_tool(bool p_paint);
+	void _sync_tool_buttons();
+	void _brush_setting_changed();
+	void _mesh_picker_changed(const Ref<Resource> &p_resource);
+	void _scene_picker_changed(const Ref<Resource> &p_resource);
+	void _randomize_seed();
+	void _clear_all();
+	void _confirm_clear();
+
+protected:
+	static void _bind_methods();
+
+public:
+	void edit(ScatterPainter3D *p_node);
+	void update_brush_settings();
+	void update_stats();
+	void set_plugin(ScatterPainterEditorPlugin *p_plugin) { plugin = p_plugin; }
+
+	ScatterPainterEditor();
+};
+
+class ScatterPainterEditorPlugin : public EditorPlugin {
+	GDCLASS(ScatterPainterEditorPlugin, EditorPlugin);
+
+	ScatterPainter3D *edited_node = nullptr;
+
 	bool paint_mode = true;
 	bool painting = false;
 	bool erasing = false;
@@ -83,38 +109,16 @@ class ScatterPainterEditor : public Control {
 	void _gather_collision_rids(Node *p_node, HashSet<RID> &r_rids) const;
 	void _apply_stroke_at(Camera3D *p_camera, const Vector2 &p_pos);
 	void _commit_stroke();
-	void _update_stats();
-	void _queue_overlay_redraw();
 
-	void _set_tool(bool p_paint);
-	void _brush_setting_changed();
-	void _mesh_picker_changed(const Ref<Resource> &p_resource);
-	void _scene_picker_changed(const Ref<Resource> &p_resource);
-	void _randomize_seed();
-	void _clear_all();
-	void _confirm_clear();
-
-protected:
-	static void _bind_methods();
+	void _reset_stroke_state();
 
 public:
-	void edit(ScatterPainter3D *p_node);
-	void update_brush_settings();
-	void set_plugin(ScatterPainterEditorPlugin *p_plugin) { plugin = p_plugin; }
-
-	virtual EditorPlugin::AfterGUIInput forward_3d_gui_input(Camera3D *p_camera, const Ref<InputEvent> &p_event);
-	virtual void forward_3d_draw_over_viewport(Control *p_overlay);
-
-	ScatterPainterEditor();
-};
-
-class ScatterPainterEditorPlugin : public EditorPlugin {
-	GDCLASS(ScatterPainterEditorPlugin, EditorPlugin);
-
-	ScatterPainterEditor *editor = nullptr;
+	ScatterPainterEditor *painter_editor = nullptr;
 	EditorDock *painter_dock = nullptr;
 
-public:
+	void set_paint_mode(bool p_paint);
+	bool is_paint_mode() const { return paint_mode; }
+
 	virtual String get_plugin_name() const override { return "ScatterPainter3DEditor"; }
 
 	virtual void edit(Object *p_object) override;

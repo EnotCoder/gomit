@@ -36,7 +36,9 @@
 #include "editor/docks/editor_dock.h"
 #include "editor/docks/editor_dock_manager.h"
 #include "editor/editor_undo_redo_manager.h"
+#include "editor/inspector/editor_inspector.h"
 #include "editor/inspector/editor_resource_picker.h"
+#include "scene/3d/camera_3d.h"
 #include "scene/3d/physics/collision_object_3d.h"
 #include "scene/3d/scatter_painter_3d.h"
 #include "scene/gui/box_container.h"
@@ -53,6 +55,7 @@
 
 void ScatterPainterEditor::edit(ScatterPainter3D *p_node) {
 	node = p_node;
+	_sync_tool_buttons();
 	update_brush_settings();
 }
 
@@ -72,91 +75,10 @@ void ScatterPainterEditor::update_brush_settings() {
 		mesh_picker->set_edited_resource(Ref<Resource>());
 		scene_picker->set_edited_resource(Ref<Resource>());
 	}
-	_update_stats();
+	update_stats();
 }
 
-void ScatterPainterEditor::_gather_collision_rids(Node *p_node, HashSet<RID> &r_rids) const {
-	if (!p_node) {
-		return;
-	}
-	CollisionObject3D *collision_object = Object::cast_to<CollisionObject3D>(p_node);
-	if (collision_object) {
-		r_rids.insert(collision_object->get_rid());
-	}
-	for (int i = 0; i < p_node->get_child_count(); i++) {
-		_gather_collision_rids(p_node->get_child(i), r_rids);
-	}
-}
-
-bool ScatterPainterEditor::_raycast(Camera3D *p_camera, const Vector2 &p_pos, Vector3 &r_position, Vector3 &r_normal) {
-	ERR_FAIL_NULL_V(node, false);
-	if (!node->is_inside_tree()) {
-		return false;
-	}
-
-	Ref<World3D> world = node->get_world_3d();
-	ERR_FAIL_NULL_V(world, false);
-
-	PhysicsDirectSpaceState3D *space = world->get_direct_space_state();
-	ERR_FAIL_NULL_V(space, false);
-
-	PS3DT::RayParameters params;
-	params.from = p_camera->project_ray_origin(p_pos);
-	params.to = params.from + p_camera->project_ray_normal(p_pos) * p_camera->get_far();
-	_gather_collision_rids(node, params.exclude);
-
-	PS3DT::RayResult result;
-	if (!space->intersect_ray(params, result)) {
-		return false;
-	}
-
-	r_position = result.position;
-	r_normal = result.normal;
-	return true;
-}
-
-void ScatterPainterEditor::_apply_stroke_at(Camera3D *p_camera, const Vector2 &p_pos) {
-	Vector3 hit;
-	Vector3 normal;
-	if (!_raycast(p_camera, p_pos, hit, normal)) {
-		has_overlay_hit = false;
-		_queue_overlay_redraw();
-		return;
-	}
-
-	has_overlay_hit = true;
-	overlay_hit = hit;
-	last_paint_point = hit;
-	has_last_paint_point = true;
-
-	if (painting) {
-		node->paint_stroke(hit, normal);
-	} else if (erasing) {
-		node->erase_near(hit, node->get_brush_radius());
-	}
-	_update_stats();
-	_queue_overlay_redraw();
-}
-
-void ScatterPainterEditor::_commit_stroke() {
-	if (!node || !stroke_active) {
-		return;
-	}
-	stroke_active = false;
-
-	Array after = node->get_instances();
-	if (after == stroke_before) {
-		return;
-	}
-
-	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->create_action(TTR("Paint Scatter Instances"), UndoRedo::MERGE_DISABLE, node);
-	undo_redo->add_do_method(node, SNAME("set_instances"), after);
-	undo_redo->add_undo_method(node, SNAME("set_instances"), stroke_before);
-	undo_redo->commit_action();
-}
-
-void ScatterPainterEditor::_update_stats() {
+void ScatterPainterEditor::update_stats() {
 	if (!stats_label) {
 		return;
 	}
@@ -167,17 +89,20 @@ void ScatterPainterEditor::_update_stats() {
 	}
 }
 
-void ScatterPainterEditor::_queue_overlay_redraw() {
+void ScatterPainterEditor::_set_tool(bool p_paint) {
 	if (plugin) {
-		plugin->update_overlays();
+		plugin->set_paint_mode(p_paint);
+		_sync_tool_buttons();
 	}
 }
 
-void ScatterPainterEditor::_set_tool(bool p_paint) {
-	paint_mode = p_paint;
-	paint_button->set_pressed(p_paint);
-	erase_button->set_pressed(!p_paint);
-	has_last_paint_point = false;
+void ScatterPainterEditor::_sync_tool_buttons() {
+	if (!paint_button || !erase_button) {
+		return;
+	}
+	const bool paint_active = plugin ? plugin->is_paint_mode() : true;
+	paint_button->set_pressed(paint_active);
+	erase_button->set_pressed(!paint_active);
 }
 
 void ScatterPainterEditor::_brush_setting_changed() {
@@ -223,115 +148,21 @@ void ScatterPainterEditor::_clear_all() {
 	undo_redo->add_do_method(node, SNAME("clear_instances"));
 	undo_redo->add_undo_method(node, SNAME("set_instances"), node->get_instances());
 	undo_redo->commit_action();
-	_update_stats();
+	update_stats();
 }
 
 void ScatterPainterEditor::_confirm_clear() {
 	_clear_all();
 }
 
-EditorPlugin::AfterGUIInput ScatterPainterEditor::forward_3d_gui_input(Camera3D *p_camera, const Ref<InputEvent> &p_event) {
-	if (!node) {
-		return EditorPlugin::AFTER_GUI_INPUT_PASS;
-	}
-
-	Ref<InputEventMouseButton> mb = p_event;
-	if (mb.is_valid()) {
-		if (mb->get_button_index() == MouseButton::LEFT) {
-			if (mb->is_pressed()) {
-				stroke_active = true;
-				stroke_before = node->get_instances();
-				painting = paint_mode;
-				erasing = !paint_mode;
-				last_camera = p_camera;
-				_apply_stroke_at(p_camera, mb->get_position());
-				return EditorPlugin::AFTER_GUI_INPUT_STOP;
-			} else {
-				_commit_stroke();
-				painting = false;
-				erasing = false;
-				has_last_paint_point = false;
-			}
-		}
-		return EditorPlugin::AFTER_GUI_INPUT_STOP;
-	}
-
-	Ref<InputEventMouseMotion> mm = p_event;
-	if (mm.is_valid()) {
-		last_camera = p_camera;
-
-		if (painting) {
-			Vector3 hit;
-			Vector3 normal;
-			if (_raycast(p_camera, mm->get_position(), hit, normal)) {
-				has_overlay_hit = true;
-				overlay_hit = hit;
-				const real_t step = MAX(node->get_spacing(), 0.01);
-				const bool moved = !has_last_paint_point || hit.distance_to(last_paint_point) >= step;
-				if (moved) {
-					has_last_paint_point = true;
-					last_paint_point = hit;
-					node->paint_stroke(hit, normal);
-					_update_stats();
-				}
-			} else {
-				has_overlay_hit = false;
-			}
-			_queue_overlay_redraw();
-			return EditorPlugin::AFTER_GUI_INPUT_STOP;
-		}
-
-		if (erasing) {
-			Vector3 hit;
-			Vector3 normal;
-			if (_raycast(p_camera, mm->get_position(), hit, normal)) {
-				has_overlay_hit = true;
-				overlay_hit = hit;
-				node->erase_near(hit, node->get_brush_radius());
-				_update_stats();
-			} else {
-				has_overlay_hit = false;
-			}
-			_queue_overlay_redraw();
-			return EditorPlugin::AFTER_GUI_INPUT_STOP;
-		}
-
-// Idle hover: update the brush radius preview.
-		Vector3 hit;
-		Vector3 normal;
-		if (_raycast(p_camera, mm->get_position(), hit, normal)) {
-			has_overlay_hit = true;
-			overlay_hit = hit;
-		} else {
-			has_overlay_hit = false;
-		}
-		_queue_overlay_redraw();
-	}
-
-	return EditorPlugin::AFTER_GUI_INPUT_PASS;
-}
-
-void ScatterPainterEditor::forward_3d_draw_over_viewport(Control *p_overlay) {
-	if (!node || !has_overlay_hit || !last_camera) {
-		return;
-	}
-
-	const Vector2 center_2d = last_camera->unproject_position(overlay_hit);
-	const Vector3 camera_right = last_camera->get_global_transform().basis.get_column(0);
-	const Vector2 edge_2d = last_camera->unproject_position(overlay_hit + camera_right * node->get_brush_radius());
-	const real_t radius_2d = MAX(center_2d.distance_to(edge_2d), 1.0);
-
-	const Color color = paint_mode ? Color(0.3, 0.9, 0.3, 0.15) : Color(0.95, 0.3, 0.3, 0.15);
-	p_overlay->draw_circle(center_2d, radius_2d, color);
-	p_overlay->draw_arc(center_2d, radius_2d, 0, Math::TAU, 64, color.lightened(0.3), 2.0);
-}
-
 void ScatterPainterEditor::_bind_methods() {
 }
 
 ScatterPainterEditor::ScatterPainterEditor() {
+	set_name("ScatterPainterEditor");
+	set_h_size_flags(SIZE_EXPAND_FILL);
+
 	VBoxContainer *main = memnew(VBoxContainer);
-	main->set_name("ScatterPainterEditor");
 	main->set_anchors_preset(Control::PRESET_FULL_RECT);
 	add_child(main);
 
@@ -349,7 +180,7 @@ ScatterPainterEditor::ScatterPainterEditor() {
 	button_group.instantiate();
 	paint_button->set_button_group(button_group);
 	erase_button->set_button_group(button_group);
-	paint_button->set_pressed(true);
+	_sync_tool_buttons();
 
 	paint_button->connect(SceneStringName(pressed), callable_mp(this, &ScatterPainterEditor::_set_tool).bind(true));
 	erase_button->connect(SceneStringName(pressed), callable_mp(this, &ScatterPainterEditor::_set_tool).bind(false));
@@ -442,11 +273,29 @@ ScatterPainterEditor::ScatterPainterEditor() {
 	stats_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
 	main->add_child(stats_label);
 
-	_update_stats();
+	update_stats();
+}
+
+///////////////////////
+
+void ScatterPainterEditorPlugin::_reset_stroke_state() {
+	painting = false;
+	erasing = false;
+	stroke_active = false;
+	has_last_paint_point = false;
+	has_overlay_hit = false;
 }
 
 void ScatterPainterEditorPlugin::edit(Object *p_object) {
-	editor->edit(Object::cast_to<ScatterPainter3D>(p_object));
+	ScatterPainter3D *new_node = Object::cast_to<ScatterPainter3D>(p_object);
+	if (new_node == edited_node) {
+		return;
+	}
+	edited_node = new_node;
+	_reset_stroke_state();
+	if (painter_editor) {
+		painter_editor->edit(edited_node);
+	}
 }
 
 bool ScatterPainterEditorPlugin::handles(Object *p_object) const {
@@ -455,19 +304,211 @@ bool ScatterPainterEditorPlugin::handles(Object *p_object) const {
 
 void ScatterPainterEditorPlugin::make_visible(bool p_visible) {
 	if (p_visible) {
-		painter_dock->open();
+		if (painter_dock) {
+			painter_dock->open();
+		}
 	} else {
-		painter_dock->close();
-		editor->edit(nullptr);
+		if (painter_dock) {
+			painter_dock->close();
+		}
+		edited_node = nullptr;
+		_reset_stroke_state();
+		if (painter_editor) {
+			painter_editor->edit(nullptr);
+		}
 	}
 }
 
+void ScatterPainterEditorPlugin::set_paint_mode(bool p_paint) {
+	if (paint_mode == p_paint) {
+		return;
+	}
+	paint_mode = p_paint;
+	_reset_stroke_state();
+	update_overlays();
+}
+
+void ScatterPainterEditorPlugin::_gather_collision_rids(Node *p_node, HashSet<RID> &r_rids) const {
+	if (!p_node) {
+		return;
+	}
+	CollisionObject3D *collision_object = Object::cast_to<CollisionObject3D>(p_node);
+	if (collision_object) {
+		r_rids.insert(collision_object->get_rid());
+	}
+	for (int i = 0; i < p_node->get_child_count(); i++) {
+		_gather_collision_rids(p_node->get_child(i), r_rids);
+	}
+}
+
+bool ScatterPainterEditorPlugin::_raycast(Camera3D *p_camera, const Vector2 &p_pos, Vector3 &r_position, Vector3 &r_normal) {
+	ERR_FAIL_NULL_V(edited_node, false);
+	if (!edited_node->is_inside_tree()) {
+		return false;
+	}
+
+	Ref<World3D> world = edited_node->get_world_3d();
+	ERR_FAIL_NULL_V(world, false);
+
+	PhysicsDirectSpaceState3D *space = world->get_direct_space_state();
+	ERR_FAIL_NULL_V(space, false);
+
+	PS3DT::RayParameters params;
+	params.from = p_camera->project_ray_origin(p_pos);
+	params.to = params.from + p_camera->project_ray_normal(p_pos) * p_camera->get_far();
+	_gather_collision_rids(edited_node, params.exclude);
+
+	PS3DT::RayResult result;
+	if (!space->intersect_ray(params, result)) {
+		return false;
+	}
+
+	r_position = result.position;
+	r_normal = result.normal;
+	return true;
+}
+
+void ScatterPainterEditorPlugin::_apply_stroke_at(Camera3D *p_camera, const Vector2 &p_pos) {
+	Vector3 hit;
+	Vector3 normal;
+	if (!_raycast(p_camera, p_pos, hit, normal)) {
+		has_overlay_hit = false;
+		update_overlays();
+		return;
+	}
+
+	has_overlay_hit = true;
+	overlay_hit = hit;
+	last_paint_point = hit;
+	has_last_paint_point = true;
+
+	if (painting) {
+		edited_node->paint_stroke(hit, normal);
+	} else if (erasing) {
+		edited_node->erase_near(hit, edited_node->get_brush_radius());
+	}
+	if (painter_editor) {
+		painter_editor->update_stats();
+	}
+	update_overlays();
+}
+
+void ScatterPainterEditorPlugin::_commit_stroke() {
+	if (!edited_node || !stroke_active) {
+		return;
+	}
+	stroke_active = false;
+
+	Array after = edited_node->get_instances();
+	if (after == stroke_before) {
+		return;
+	}
+
+	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
+	undo_redo->create_action(TTR("Paint Scatter Instances"), UndoRedo::MERGE_DISABLE, edited_node);
+	undo_redo->add_do_method(edited_node, SNAME("set_instances"), after);
+	undo_redo->add_undo_method(edited_node, SNAME("set_instances"), stroke_before);
+	undo_redo->commit_action();
+}
+
 EditorPlugin::AfterGUIInput ScatterPainterEditorPlugin::forward_3d_gui_input(Camera3D *p_camera, const Ref<InputEvent> &p_event) {
-	return editor->forward_3d_gui_input(p_camera, p_event);
+	if (!edited_node) {
+		return EditorPlugin::AFTER_GUI_INPUT_PASS;
+	}
+
+	Ref<InputEventMouseButton> mb = p_event;
+	if (mb.is_valid()) {
+		if (mb->get_button_index() == MouseButton::LEFT) {
+			if (mb->is_pressed()) {
+				stroke_active = true;
+				stroke_before = edited_node->get_instances();
+				painting = paint_mode;
+				erasing = !paint_mode;
+				last_camera = p_camera;
+				_apply_stroke_at(p_camera, mb->get_position());
+				return EditorPlugin::AFTER_GUI_INPUT_STOP;
+			} else {
+				_commit_stroke();
+				painting = false;
+				erasing = false;
+				has_last_paint_point = false;
+			}
+		}
+		return EditorPlugin::AFTER_GUI_INPUT_STOP;
+	}
+
+	Ref<InputEventMouseMotion> mm = p_event;
+	if (mm.is_valid()) {
+		last_camera = p_camera;
+
+		if (painting) {
+			Vector3 hit;
+			Vector3 normal;
+			if (_raycast(p_camera, mm->get_position(), hit, normal)) {
+				has_overlay_hit = true;
+				overlay_hit = hit;
+				const real_t step = MAX(edited_node->get_spacing(), 0.01);
+				const bool moved = !has_last_paint_point || hit.distance_to(last_paint_point) >= step;
+				if (moved) {
+					has_last_paint_point = true;
+					last_paint_point = hit;
+					edited_node->paint_stroke(hit, normal);
+					if (painter_editor) {
+						painter_editor->update_stats();
+					}
+				}
+			} else {
+				has_overlay_hit = false;
+			}
+			update_overlays();
+			return EditorPlugin::AFTER_GUI_INPUT_STOP;
+		}
+
+		if (erasing) {
+			Vector3 hit;
+			Vector3 normal;
+			if (_raycast(p_camera, mm->get_position(), hit, normal)) {
+				has_overlay_hit = true;
+				overlay_hit = hit;
+				edited_node->erase_near(hit, edited_node->get_brush_radius());
+				if (painter_editor) {
+					painter_editor->update_stats();
+				}
+			} else {
+				has_overlay_hit = false;
+			}
+			update_overlays();
+			return EditorPlugin::AFTER_GUI_INPUT_STOP;
+		}
+
+		// Idle hover: update the brush radius preview.
+		Vector3 hit;
+		Vector3 normal;
+		if (_raycast(p_camera, mm->get_position(), hit, normal)) {
+			has_overlay_hit = true;
+			overlay_hit = hit;
+		} else {
+			has_overlay_hit = false;
+		}
+		update_overlays();
+	}
+
+	return EditorPlugin::AFTER_GUI_INPUT_PASS;
 }
 
 void ScatterPainterEditorPlugin::forward_3d_draw_over_viewport(Control *p_overlay) {
-	editor->forward_3d_draw_over_viewport(p_overlay);
+	if (!edited_node || !has_overlay_hit || !last_camera) {
+		return;
+	}
+
+	const Vector2 center_2d = last_camera->unproject_position(overlay_hit);
+	const Vector3 camera_right = last_camera->get_global_transform().basis.get_column(0);
+	const Vector2 edge_2d = last_camera->unproject_position(overlay_hit + camera_right * edited_node->get_brush_radius());
+	const real_t radius_2d = MAX(center_2d.distance_to(edge_2d), 1.0);
+
+	const Color color = paint_mode ? Color(0.3, 0.9, 0.3, 0.15) : Color(0.95, 0.3, 0.3, 0.15);
+	p_overlay->draw_circle(center_2d, radius_2d, color);
+	p_overlay->draw_arc(center_2d, radius_2d, 0, Math::TAU, 64, color.lightened(0.3), 2.0);
 }
 
 void ScatterPainterEditorPlugin::_notification(int p_what) {
@@ -478,10 +519,39 @@ void ScatterPainterEditorPlugin::_notification(int p_what) {
 	}
 }
 
+///////////////////////
+
+class ScatterPainterInspectorPlugin : public EditorInspectorPlugin {
+	GDCLASS(ScatterPainterInspectorPlugin, EditorInspectorPlugin);
+
+	bool can_handle(Object *p_object) override {
+		return Object::cast_to<ScatterPainter3D>(p_object) != nullptr;
+	}
+
+	bool parse_property(Object *p_object, const Variant::Type p_type, const String &p_path, const PropertyHint p_hint, const String &p_hint_text, const BitField<PropertyUsageFlags> p_usage, const bool p_wide) override {
+		// These are presented (and edited) by the painter dock,
+		// so hide them from the inspector and keep only the standard node properties.
+		static const HashSet<String> hidden_props = {
+			"painting_mesh",
+			"painting_scene",
+			"instances",
+			"brush_radius",
+			"spacing",
+			"scale_min",
+			"scale_max",
+			"random_rotation_degrees",
+			"random_tilt_degrees",
+			"random_seed",
+			"align_to_surface",
+		};
+		return hidden_props.has(p_path);
+	}
+};
+
 ScatterPainterEditorPlugin::ScatterPainterEditorPlugin() {
-	editor = memnew(ScatterPainterEditor);
-	editor->set_plugin(this);
-	editor->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+	painter_editor = memnew(ScatterPainterEditor);
+	painter_editor->set_plugin(this);
+	painter_editor->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 
 	painter_dock = memnew(EditorDock);
 	painter_dock->set_name("ScatterPainter3D");
@@ -491,8 +561,12 @@ ScatterPainterEditorPlugin::ScatterPainterEditorPlugin() {
 	painter_dock->set_available_layouts(EditorDock::DOCK_LAYOUT_ALL);
 	painter_dock->set_global(false);
 	painter_dock->set_transient(true);
-	painter_dock->add_child(editor);
+	painter_dock->add_child(painter_editor);
 
 	EditorDockManager::get_singleton()->add_dock(painter_dock);
 	painter_dock->close();
+
+	Ref<ScatterPainterInspectorPlugin> plugin;
+	plugin.instantiate();
+	add_inspector_plugin(plugin);
 }
