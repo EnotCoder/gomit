@@ -1795,6 +1795,14 @@ void GDScriptAnalyzer::resolve_function_signature(GDScriptParser::FunctionNode *
 		resolve_parameter(p_function->parameters[i]);
 		method_info.arguments.push_back(p_function->parameters[i]->type_constraint.to_property_info(p_function->parameters[i]->identifier->name));
 #ifdef DEBUG_ENABLED
+		const GDScriptParser::ParameterNode *param = p_function->parameters[i];
+		if (param->type_constraint.kind == GDScriptParser::DataType::VARIANT && !param->type_constraint.is_hard_type()) {
+			parser->push_warning(param, GDScriptWarning::UNTYPED_DECLARATION, "Parameter", param->identifier->name);
+		} else if (param->type_constraint.builtin_type == Variant::ARRAY && !param->type_constraint.has_container_element_type(0)) {
+			parser->push_warning(param, GDScriptWarning::UNTYPED_ARRAY, "Parameter", param->identifier->name);
+		} else if (param->type_constraint.builtin_type == Variant::DICTIONARY && !param->type_constraint.has_container_element_types()) {
+			parser->push_warning(param, GDScriptWarning::UNTYPED_DICTIONARY, "Parameter", param->identifier->name);
+		}
 		is_shadowing(p_function->parameters[i]->identifier, "function parameter", true);
 #endif // DEBUG_ENABLED
 
@@ -1862,7 +1870,7 @@ void GDScriptAnalyzer::resolve_function_signature(GDScriptParser::FunctionNode *
 			// In case the function is not typed, we can safely assume it's a Variant, so it's okay to mark as "inferred" here.
 			// It's not "undetected" to not mix up with unknown functions.
 			GDScriptParser::DataType return_type;
-			return_type.type_source = GDScriptParser::DataType::INFERRED;
+			return_type.type_source = GDScriptParser::DataType::UNDETECTED; // GStrict: mark as undetected to trigger UNTYPED_DECLARATION
 			return_type.kind = GDScriptParser::DataType::VARIANT;
 			p_function->return_type_constraint = return_type;
 		}
@@ -1992,7 +2000,7 @@ void GDScriptAnalyzer::resolve_function_signature(GDScriptParser::FunctionNode *
 		function_visible_name = p_is_lambda ? "<anonymous lambda>" : "<unknown function>";
 	}
 	if (p_function->return_type == nullptr) {
-		parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::UNTYPED_DECLARATION, "Function", function_visible_name);
+		parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::UNTYPED_DECLARATION, "Function return", function_visible_name);
 	} else if (p_function->return_type_constraint.type_source == GDScriptParser::DataType::ANNOTATED_EXPLICIT) {
 		// Typed containers rule: function return types must specify element types.
 		if (p_function->return_type_constraint.builtin_type == Variant::ARRAY && !p_function->return_type_constraint.has_container_element_type(0)) {
@@ -2007,7 +2015,7 @@ void GDScriptAnalyzer::resolve_function_signature(GDScriptParser::FunctionNode *
 		const String function_name_str = p_function->identifier->name;
 		const String snake_case_name = function_name_str.to_snake_case();
 		if (function_name_str != snake_case_name) {
-			parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::NON_SNAKE_CASE_FUNCTION, function_visible_name, snake_case_name);
+			parser->push_warning(p_function->identifier->start_line, p_function->identifier->start_column, p_function->identifier->end_line, p_function->identifier->end_column, GDScriptWarning::NON_SNAKE_CASE_FUNCTION, function_visible_name, snake_case_name);
 		}
 	}
 #endif // DEBUG_ENABLED

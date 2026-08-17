@@ -41,6 +41,7 @@
 #include "core/io/resource_loader.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/os/os.h"
 #include "core/templates/rb_set.h"
 
 #ifdef TOOLS_ENABLED
@@ -746,6 +747,76 @@ void GDScript::_restore_old_static_data() {
 
 #endif
 
+// Wires up the rust-style console error rendering used for GStrict-enforced rules.
+namespace {
+
+struct GStrictRuleInfo {
+	GDScriptWarning::Code code;
+	int num; // Formal code shown as error[E%03d].
+	String summary; // Short rule-level description.
+	String note; // What gomit enforces.
+	String help; // Fix suggestion (may be empty and computed from symbols).
+};
+
+const GStrictRuleInfo *_get_gstrict_rule(GDScriptWarning::Code p_code) {
+	static const GStrictRuleInfo rules[] = {
+		{ GDScriptWarning::UNTYPED_DECLARATION, 1, "declaration must be explicitly typed", "gomit (GStrict) requires explicit type annotations on declarations", "add an explicit type annotation, e.g. \"var foo: int\"" },
+		{ GDScriptWarning::INFERRED_DECLARATION, 2, "declaration must not rely on type inference", "gomit (GStrict) requires explicit type annotations on declarations", "specify the type explicitly" },
+		{ GDScriptWarning::INFERENCE_ON_VARIANT, 3, "type cannot be inferred from Variant", "gomit (GStrict) disallows type inference from Variant values", "specify a concrete type explicitly" },
+		{ GDScriptWarning::UNTYPED_ARRAY, 4, "Array must declare its element type", "gomit (GStrict) requires Arrays to declare an element type", "annotate the element type, e.g. \"Array[int]\"" },
+		{ GDScriptWarning::UNTYPED_DICTIONARY, 5, "Dictionary must declare its key and value types", "gomit (GStrict) requires Dictionaries to declare key and value types", "annotate the key/value types, e.g. \"Dictionary[String, int]\"" },
+		{ GDScriptWarning::NON_SNAKE_CASE_FUNCTION, 12, "function name must be snake_case", "gomit (GStrict) enforces snake_case for function names", "rename to `%s`" },
+	};
+	for (const GStrictRuleInfo &rule : rules) {
+		if (rule.code == p_code) {
+			return &rule;
+		}
+	}
+	return nullptr;
+}
+
+String _format_gstrict_error(const GDScriptParser::ParserError &p_error, const String &p_source, const String &p_path) {
+	const GStrictRuleInfo *rule = _get_gstrict_rule(p_error.gstrict_code);
+	ERR_FAIL_NULL_V(rule, p_error.message);
+
+	String ret;
+	ret = "error[E" + itos(rule->num).pad_zeros(3) + "]: " + rule->summary + "\n";
+	ret += " --> " + p_path + ":" + itos(p_error.start_line) + ":" + itos(p_error.start_column) + "\n";
+	ret += "  |\n";
+
+	const Vector<String> lines = p_source.split("\n");
+	if (p_error.start_line >= 1 && p_error.start_line <= (int)lines.size()) {
+		String source_line = lines[p_error.start_line - 1].rstrip("\r");
+		const String num = itos(p_error.start_line);
+		ret += num + "| " + source_line + "\n";
+
+		int crank_span = 1;
+		if (p_error.end_line == p_error.start_line) {
+			crank_span = MAX(1, p_error.end_column - p_error.start_column);
+		}
+		ret += String(" ").repeat(num.length()) + "| " + String(" ").repeat(MAX(0, p_error.start_column - 1)) + String("^").repeat(crank_span) + "\n";
+	}
+
+	ret += "  |\n";
+
+	String help = rule->help;
+	if (p_error.gstrict_code == GDScriptWarning::NON_SNAKE_CASE_FUNCTION && p_error.gstrict_symbols.size() > 1) {
+		help = vformat(help, p_error.gstrict_symbols[1]);
+	}
+
+	ret += "  = note: " + rule->note + "\n";
+	if (!help.is_empty()) {
+		ret += "  = help: " + help + "\n";
+	}
+	return ret;
+}
+
+void _print_gstrict_error(const GDScriptParser::ParserError &p_error, const String &p_source, const String &p_path) {
+	OS::get_singleton()->printerr("%s\n", _format_gstrict_error(p_error, p_source, p_path).utf8().get_data());
+}
+
+} // namespace
+
 Error GDScript::reload(bool p_keep_state) {
 	if (reloading) {
 		return OK;
@@ -848,7 +919,12 @@ Error GDScript::reload(bool p_keep_state) {
 
 		const List<GDScriptParser::ParserError>::Element *e = parser.get_errors().front();
 		while (e != nullptr) {
-			_err_print_error("GDScript::reload", path.is_empty() ? "built-in" : (const char *)path.utf8().get_data(), e->get().start_line, ("Parse Error: " + e->get().message).utf8().get_data(), false, ERR_HANDLER_SCRIPT);
+			if (e->get().gstrict_code != GDScriptWarning::WARNING_MAX) {
+				// GStrict-enforced rules get the rust-style console rendering.
+				_print_gstrict_error(e->get(), source, _get_debug_path());
+			} else {
+				_err_print_error("GDScript::reload", path.is_empty() ? "built-in" : (const char *)path.utf8().get_data(), e->get().start_line, ("Parse Error: " + e->get().message).utf8().get_data(), false, ERR_HANDLER_SCRIPT);
+			}
 			e = e->next();
 		}
 		reloading = false;

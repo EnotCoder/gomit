@@ -273,10 +273,12 @@ void GDScriptParser::push_error(const String &p_message, const GDScriptTokenizer
 	push_error(p_message, p_origin.start_line, p_origin.start_column, p_origin.end_line, p_origin.end_column);
 }
 
-void GDScriptParser::push_error(const String &p_message, int p_start_line, int p_start_column, int p_end_line, int p_end_column) {
+void GDScriptParser::push_error(const String &p_message, int p_start_line, int p_start_column, int p_end_line, int p_end_column, GDScriptWarning::Code p_gstrict_code, const Vector<String> &p_gstrict_symbols) {
 	panic_mode = true;
 	ParserError err;
 	err.message = p_message;
+	err.gstrict_code = p_gstrict_code;
+	err.gstrict_symbols = p_gstrict_symbols;
 
 	err.start_line = p_start_line;
 	err.start_column = p_start_column;
@@ -334,7 +336,7 @@ void GDScriptParser::apply_pending_warnings() {
 		warning.end_column = pw.end_column;
 
 		if (pw.treated_as_error) {
-			push_error(warning.get_message() + String(" (Warning treated as error.)"), pw.start_line, pw.start_column, pw.end_line, pw.end_column);
+			push_error(warning.get_message() + String(" (Warning treated as error.)"), pw.start_line, pw.start_column, pw.end_line, pw.end_column, pw.code, pw.symbols);
 			continue;
 		}
 

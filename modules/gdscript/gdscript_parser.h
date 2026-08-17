@@ -275,6 +275,11 @@ public:
 		int start_column;
 		int end_line;
 		int end_column;
+		// Set when the error originates from a GStrict-enforced warning rule
+		// (see GDScriptParser::apply_pending_warnings). Used to render errors
+		// in the rust-style console format. WARNING_MAX means "not a GStrict error".
+		GDScriptWarning::Code gstrict_code = GDScriptWarning::WARNING_MAX;
+		Vector<String> gstrict_symbols;
 	};
 
 #ifdef TOOLS_ENABLED
@@ -1532,7 +1537,7 @@ private:
 	void clear();
 
 	void push_error(const String &p_message, const Node *p_origin = nullptr);
-	void push_error(const String &p_message, int p_start_line, int p_start_column, int p_end_line, int p_end_column);
+	void push_error(const String &p_message, int p_start_line, int p_start_column, int p_end_line, int p_end_column, GDScriptWarning::Code p_gstrict_code = GDScriptWarning::WARNING_MAX, const Vector<String> &p_gstrict_symbols = Vector<String>());
 	void push_error(const String &p_message, const GDScriptTokenizer::Token &p_origin);
 
 #ifdef DEBUG_ENABLED
