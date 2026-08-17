@@ -39,6 +39,7 @@
 #include "core/object/callable_mp.h"
 #include "core/os/keyboard.h"
 #include "core/os/os.h"
+#include "core/os/time.h"
 #include "core/version.h"
 #include "editor/doc/editor_help.h"
 #include "editor/editor_string_names.h"
@@ -47,6 +48,8 @@
 #include "editor/gui/editor_title_bar.h"
 #include "editor/gui/editor_version_button.h"
 #include "editor/inspector/editor_inspector.h"
+#include "editor/project_manager/activity_graph.h"
+#include "editor/project_manager/activity_tracker.h"
 #include "editor/project_manager/engine_update_label.h"
 #include "editor/project_manager/project_dialog.h"
 #include "editor/project_manager/project_list.h"
@@ -259,9 +262,8 @@ void ProjectManager::_update_theme(bool p_skip_creation) {
 		background_panel->add_theme_style_override(SceneStringName(panel), get_theme_stylebox("Background", EditorStringName(EditorStyles)));
 		main_view_container->add_theme_style_override(SceneStringName(panel), get_theme_stylebox("panel_container", "ProjectManager"));
 
-		title_bar_logo->set_button_icon(get_editor_theme_icon("TitleBarLogo"));
-
 		_set_main_view_icon(MAIN_VIEW_PROJECTS, get_editor_theme_icon("ProjectList"));
+		_set_main_view_icon(MAIN_VIEW_ACTIVITY, get_editor_theme_icon("TimelineIndicator"));
 
 		// Project list.
 		{
@@ -382,6 +384,9 @@ void ProjectManager::_select_main_view(int p_id) {
 	main_view_toggle_map[current_main_view]->set_pressed_no_signal(true);
 	main_view_map[current_main_view]->set_visible(true);
 
+if (current_main_view == MAIN_VIEW_ACTIVITY && activity_graph->is_inside_tree()) {
+		_update_activity_view();
+	}
 #ifndef ANDROID_ENABLED
 	if (current_main_view == MAIN_VIEW_PROJECTS && search_box->is_inside_tree()) {
 		// Automatically grab focus when the user moves from the Templates tab
@@ -494,6 +499,62 @@ void ProjectManager::_update_list_placeholder() {
 	}
 
 	empty_list_placeholder->show();
+}
+
+// Converts minutes to a compact "Nh Mm" string.
+static String _format_minutes(int64_t p_minutes) {
+	if (p_minutes <= 0) {
+		return "0m";
+	}
+	const int64_t hours = p_minutes / 60;
+	const int64_t mins = p_minutes % 60;
+	if (hours > 0) {
+		return vformat("%dh %dm", hours, mins);
+	}
+	return vformat("%dm", mins);
+}
+
+void ProjectManager::_update_activity_view() {
+	HashMap<int64_t, int64_t> minutes = ActivityTracker::get_daily_minutes();
+
+	activity_graph->set_data(minutes);
+
+	Time *time = Time::get_singleton();
+	const int64_t now = time->get_unix_time_from_system();
+	const int64_t today_start = time->get_unix_time_from_datetime_dict(time->get_date_dict_from_unix_time(now));
+	const int64_t week_start = time->get_unix_time_from_datetime_dict(time->get_date_dict_from_unix_time(today_start - 6 * 86400));
+
+	int64_t total_minutes = 0;
+	int64_t last_week_minutes = 0;
+	int64_t today_minutes = 0;
+	int64_t best_day_minutes = 0;
+	int64_t active_days = 0;
+
+	for (const KeyValue<int64_t, int64_t> &E : minutes) {
+		if (E.key > today_start) {
+			continue;
+		}
+		total_minutes += E.value;
+		best_day_minutes = MAX(best_day_minutes, E.value);
+		if (E.value > 0) {
+			active_days++;
+		}
+		if (E.key >= week_start) {
+			last_week_minutes += E.value;
+			today_minutes = (E.key >= today_start) ? E.value : today_minutes;
+		}
+	}
+
+	const bool has_activity = total_minutes > 0;
+	activity_empty_label->set_visible(!has_activity);
+
+	if (has_activity) {
+		activity_summary_label->set_text(vformat(TTR("Total work time: %s over the last 365 days, including %s in the last 7 days."), _format_minutes(total_minutes), _format_minutes(last_week_minutes)));
+		activity_stats_label->set_text(vformat(TTR("Today: %s  ·  Best day: %s  ·  Active days: %d"), _format_minutes(today_minutes), _format_minutes(best_day_minutes), active_days));
+	} else {
+		activity_summary_label->set_text(TTR("Work time is tracked automatically while you edit your projects."));
+		activity_stats_label->set_text(String());
+	}
 }
 
 void ProjectManager::_scan_projects() {
@@ -1442,12 +1503,6 @@ ProjectManager::ProjectManager() {
 		left_hbox->set_stretch_ratio(1.0);
 		title_bar->add_child(left_hbox);
 
-		title_bar_logo = memnew(Button);
-		title_bar_logo->set_flat(true);
-		title_bar_logo->set_tooltip_text(TTR("About Godot"));
-		left_hbox->add_child(title_bar_logo);
-		title_bar_logo->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_show_about));
-
 		bool global_menu = !bool(EDITOR_GET("interface/editor/appearance/use_embedded_menu")) && NativeMenu::get_singleton()->has_feature(NativeMenu::FEATURE_GLOBAL_MENU);
 		if (global_menu) {
 			MenuBar *main_menu_bar = memnew(MenuBar);
@@ -1708,6 +1763,53 @@ ProjectManager::ProjectManager() {
 			erase_missing_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_erase_missing_projects));
 			sidebar_buttons_containter->add_child(erase_missing_btn);
 		}
+	}
+
+	// Activity view.
+	{
+		activity_vb = memnew(VBoxContainer);
+		activity_vb->set_name("ActivityTab");
+		_add_main_view(MAIN_VIEW_ACTIVITY, TTRC("Activity"), Ref<Texture2D>(), activity_vb);
+
+		ScrollContainer *scroll = memnew(ScrollContainer);
+		scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
+		scroll->set_v_size_flags(Control::SIZE_EXPAND_FILL);
+		activity_vb->add_child(scroll);
+
+		VBoxContainer *content = memnew(VBoxContainer);
+		content->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		content->set_v_size_flags(Control::SIZE_EXPAND_FILL);
+		content->set_alignment(BoxContainer::ALIGNMENT_CENTER);
+		content->add_theme_constant_override("separation", 10 * EDSCALE);
+		scroll->add_child(content);
+
+		Label *title = memnew(Label(TTRC("Activity")));
+		title->set_theme_type_variation("HeaderMedium");
+		title->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
+		content->add_child(title);
+
+		activity_summary_label = memnew(Label);
+		activity_summary_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD);
+		activity_summary_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
+		content->add_child(activity_summary_label);
+
+		activity_graph = memnew(ActivityGraph);
+		activity_graph->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		activity_graph->set_v_size_flags(Control::SIZE_EXPAND_FILL);
+		content->add_child(activity_graph);
+
+		activity_stats_label = memnew(Label);
+		activity_stats_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD);
+		activity_stats_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
+		content->add_child(activity_stats_label);
+
+		activity_empty_label = memnew(Label);
+		activity_empty_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD);
+		activity_empty_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
+		activity_empty_label->set_text(TTRC("No activity recorded yet. Start editing projects to track your work time here."));
+		content->add_child(activity_empty_label);
+
+		_update_activity_view();
 	}
 
 	// Footer bar.

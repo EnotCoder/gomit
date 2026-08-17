@@ -49,6 +49,7 @@
 #include "core/string/print_string.h"
 #include "core/string/translation_server.h"
 #include "core/version.h"
+#include "editor/project_manager/activity_tracker.h"
 #include "editor/animation/animation_player_editor_plugin.h"
 #include "editor/asset_library/asset_library_editor_plugin.h"
 #include "editor/audio/audio_stream_editor_plugin.h"
@@ -1039,6 +1040,9 @@ void EditorNode::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_READY: {
+			// Record when the editor session started for the activity tracker.
+			ActivityTracker::begin_session();
+
 			// Store the default order of bottom docks. It can only be determined dynamically.
 			PackedStringArray bottom_docks;
 			bottom_docks.reserve_exact(bottom_panel->get_tab_count());
@@ -4242,6 +4246,9 @@ void EditorNode::_exit_editor(int p_exit_code) {
 	waiting_for_first_scan = false;
 	resource_preview->stop(); // Stop early to avoid crashes.
 	_save_editor_layout();
+
+	// Record how long the editor session lasted for the activity tracker.
+	ActivityTracker::end_session();
 
 	// Dim the editor window while it's quitting to make it clearer that it's busy.
 	dim_editor(true);

@@ -34,6 +34,7 @@
 #include "scene/gui/scroll_container.h"
 
 class CheckBox;
+class ActivityGraph;
 class EditorAbout;
 class EditorAssetLibrary;
 class EditorFileDialog;
@@ -90,7 +91,6 @@ class ProjectManager : public Control {
 	Control *left_spacer = nullptr;
 	Control *right_menu_spacer = nullptr;
 	Control *right_spacer = nullptr;
-	Button *title_bar_logo = nullptr;
 	HBoxContainer *main_view_toggles = nullptr;
 	Button *quick_settings_button = nullptr;
 	VBoxContainer *project_list_sidebar = nullptr;
@@ -100,6 +100,7 @@ class ProjectManager : public Control {
 
 	enum MainViewTab {
 		MAIN_VIEW_PROJECTS,
+		MAIN_VIEW_ACTIVITY,
 		MAIN_VIEW_MAX
 	};
 
@@ -115,6 +116,16 @@ class ProjectManager : public Control {
 	void _select_main_view(int p_id);
 
 	VBoxContainer *local_projects_vb = nullptr;
+
+	// Activity view.
+
+	VBoxContainer *activity_vb = nullptr;
+	Label *activity_summary_label = nullptr;
+	Label *activity_stats_label = nullptr;
+	ActivityGraph *activity_graph = nullptr;
+	Label *activity_empty_label = nullptr;
+
+	void _update_activity_view();
 
 	EditorAbout *about_dialog = nullptr;
 
