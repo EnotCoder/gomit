@@ -1148,6 +1148,12 @@ void GDScriptAnalyzer::resolve_class_member(GDScriptParser::ClassNode *p_class, 
 #ifdef DEBUG_ENABLED
 					if (param->datatype_specifier == nullptr) {
 						parser->push_warning(param, GDScriptWarning::UNTYPED_DECLARATION, "Parameter", param->identifier->name);
+					} else if (param_type.type_source == GDScriptParser::DataType::ANNOTATED_EXPLICIT) {
+						if (param_type.builtin_type == Variant::ARRAY && !param_type.has_container_element_type(0)) {
+							parser->push_warning(param, GDScriptWarning::UNTYPED_ARRAY, "Parameter", param->identifier->name);
+						} else if (param_type.builtin_type == Variant::DICTIONARY && !param_type.has_container_element_types()) {
+							parser->push_warning(param, GDScriptWarning::UNTYPED_DICTIONARY, "Parameter", param->identifier->name);
+						}
 					}
 #endif // DEBUG_ENABLED
 					mi.arguments.push_back(param_type.to_property_info(param->identifier->name));
@@ -1987,6 +1993,13 @@ void GDScriptAnalyzer::resolve_function_signature(GDScriptParser::FunctionNode *
 	}
 	if (p_function->return_type == nullptr) {
 		parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::UNTYPED_DECLARATION, "Function", function_visible_name);
+	} else if (p_function->return_type_constraint.type_source == GDScriptParser::DataType::ANNOTATED_EXPLICIT) {
+		// Typed containers rule: function return types must specify element types.
+		if (p_function->return_type_constraint.builtin_type == Variant::ARRAY && !p_function->return_type_constraint.has_container_element_type(0)) {
+			parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::UNTYPED_ARRAY, "Function return", function_visible_name);
+		} else if (p_function->return_type_constraint.builtin_type == Variant::DICTIONARY && !p_function->return_type_constraint.has_container_element_types()) {
+			parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::UNTYPED_DICTIONARY, "Function return", function_visible_name);
+		}
 	}
 #endif // DEBUG_ENABLED
 
@@ -2295,6 +2308,18 @@ void GDScriptAnalyzer::resolve_assignable(GDScriptParser::AssignableNode *p_assi
 		}
 		if (!has_zero_value) {
 			parser->push_warning(p_assignable, GDScriptWarning::ENUM_VARIABLE_WITHOUT_DEFAULT, p_assignable->identifier->name);
+		}
+	}
+
+	// Typed containers rule: explicitly annotated Array/Dictionary without element types are violations.
+	// Implicit (`var x = []`) and inferred (`var x := []`) cases are already covered by
+	// `INFERRED_DECLARATION`/`UNTYPED_DECLARATION`, so only flag explicit annotations here.
+	if (type.type_source == GDScriptParser::DataType::ANNOTATED_EXPLICIT) {
+		const String declaration_type = is_constant ? "Constant" : (is_parameter ? "Parameter" : "Variable");
+		if (type.builtin_type == Variant::ARRAY && !type.has_container_element_type(0)) {
+			parser->push_warning(p_assignable, GDScriptWarning::UNTYPED_ARRAY, declaration_type, p_assignable->identifier->name);
+		} else if (type.builtin_type == Variant::DICTIONARY && !type.has_container_element_types()) {
+			parser->push_warning(p_assignable, GDScriptWarning::UNTYPED_DICTIONARY, declaration_type, p_assignable->identifier->name);
 		}
 	}
 #endif // DEBUG_ENABLED

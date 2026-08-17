@@ -111,6 +111,8 @@ void GDScriptParser::update_project_settings() {
 			GDScriptWarning::UNTYPED_DECLARATION, // All functions/parameters/variables must have a static type.
 			GDScriptWarning::INFERRED_DECLARATION, // Implicitly inferred types are not allowed.
 			GDScriptWarning::INFERENCE_ON_VARIANT, // No implicit Variant.
+			GDScriptWarning::UNTYPED_ARRAY, // Arrays must have an element type.
+			GDScriptWarning::UNTYPED_DICTIONARY, // Dictionaries must have key/value types.
 		};
 		for (const GDScriptWarning::Code &code : gstrict_types) {
 			warning_levels[code] = gstrict_level;

@@ -171,6 +171,12 @@ String GDScriptWarning::get_message() const {
 			return vformat(R"*(The default value uses "%s" which won't return nodes in the scene tree before "_ready()" is called. Use the "@onready" annotation to solve this.)*", symbols[0]);
 		case ONREADY_WITH_EXPORT:
 			return R"("@onready" will set the default value after "@export" takes effect and will override it.)";
+		case UNTYPED_ARRAY:
+			CHECK_SYMBOLS(2);
+			return vformat(R"*(The %s "%s" is an Array without a specified element type. Annotate the element type explicitly, e.g. "Array[<type>]".)*", symbols[0], symbols[1]);
+		case UNTYPED_DICTIONARY:
+			CHECK_SYMBOLS(2);
+			return vformat(R"*(The %s "%s" is a Dictionary without specified key/value types. Annotate both types explicitly, e.g. "Dictionary[<key_type>, <value_type>]".)*", symbols[0], symbols[1]);
 #ifndef DISABLE_DEPRECATED
 		// Never produced. These warnings migrated from 3.x by mistake.
 		case PROPERTY_USED_AS_FUNCTION: // There is already an error.
@@ -249,6 +255,8 @@ String GDScriptWarning::get_name_from_code(Code p_code) {
 		PNAME("NATIVE_METHOD_OVERRIDE"),
 		PNAME("GET_NODE_DEFAULT_WITHOUT_ONREADY"),
 		PNAME("ONREADY_WITH_EXPORT"),
+		PNAME("UNTYPED_ARRAY"),
+		PNAME("UNTYPED_DICTIONARY"),
 #ifndef DISABLE_DEPRECATED
 		"PROPERTY_USED_AS_FUNCTION",
 		"CONSTANT_USED_AS_FUNCTION",
