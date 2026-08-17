@@ -2001,6 +2001,15 @@ void GDScriptAnalyzer::resolve_function_signature(GDScriptParser::FunctionNode *
 			parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::UNTYPED_DICTIONARY, "Function return", function_visible_name);
 		}
 	}
+
+	// Function naming rule: user-defined functions must be snake_case.
+	if (p_function->identifier != nullptr) {
+		const String function_name_str = p_function->identifier->name;
+		const String snake_case_name = function_name_str.to_snake_case();
+		if (function_name_str != snake_case_name) {
+			parser->push_warning(p_function->start_line, p_function->start_column, p_function->header_end_line, p_function->header_end_column, GDScriptWarning::NON_SNAKE_CASE_FUNCTION, function_visible_name, snake_case_name);
+		}
+	}
 #endif // DEBUG_ENABLED
 
 	method_info.default_arguments.append_array(p_function->default_arg_values);

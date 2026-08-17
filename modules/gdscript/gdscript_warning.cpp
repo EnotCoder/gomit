@@ -177,6 +177,9 @@ String GDScriptWarning::get_message() const {
 		case UNTYPED_DICTIONARY:
 			CHECK_SYMBOLS(2);
 			return vformat(R"*(The %s "%s" is a Dictionary without specified key/value types. Annotate both types explicitly, e.g. "Dictionary[<key_type>, <value_type>]".)*", symbols[0], symbols[1]);
+		case NON_SNAKE_CASE_FUNCTION:
+			CHECK_SYMBOLS(2);
+			return vformat(R"*(The function "%s()" is not in snake_case. Rename it to "%s()".)*", symbols[0], symbols[1]);
 #ifndef DISABLE_DEPRECATED
 		// Never produced. These warnings migrated from 3.x by mistake.
 		case PROPERTY_USED_AS_FUNCTION: // There is already an error.
@@ -257,6 +260,7 @@ String GDScriptWarning::get_name_from_code(Code p_code) {
 		PNAME("ONREADY_WITH_EXPORT"),
 		PNAME("UNTYPED_ARRAY"),
 		PNAME("UNTYPED_DICTIONARY"),
+		PNAME("NON_SNAKE_CASE_FUNCTION"),
 #ifndef DISABLE_DEPRECATED
 		"PROPERTY_USED_AS_FUNCTION",
 		"CONSTANT_USED_AS_FUNCTION",

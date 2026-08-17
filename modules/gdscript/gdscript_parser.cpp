@@ -113,6 +113,7 @@ void GDScriptParser::update_project_settings() {
 			GDScriptWarning::INFERENCE_ON_VARIANT, // No implicit Variant.
 			GDScriptWarning::UNTYPED_ARRAY, // Arrays must have an element type.
 			GDScriptWarning::UNTYPED_DICTIONARY, // Dictionaries must have key/value types.
+			GDScriptWarning::NON_SNAKE_CASE_FUNCTION, // Function names must be snake_case.
 		};
 		for (const GDScriptWarning::Code &code : gstrict_types) {
 			warning_levels[code] = gstrict_level;

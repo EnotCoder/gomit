@@ -94,6 +94,7 @@ public:
 		ONREADY_WITH_EXPORT, // The `@onready` annotation will set the value after `@export` which is likely not intended.
 		UNTYPED_ARRAY, // Array without a specified element type.
 		UNTYPED_DICTIONARY, // Dictionary without specified key/value types.
+		NON_SNAKE_CASE_FUNCTION, // Function name is not snake_case.
 #ifndef DISABLE_DEPRECATED
 		PROPERTY_USED_AS_FUNCTION, // Function not found, but there's a property with the same name.
 		CONSTANT_USED_AS_FUNCTION, // Function not found, but there's a constant with the same name.
@@ -155,6 +156,7 @@ public:
 		ERROR, // ONREADY_WITH_EXPORT // May not work as expected.
 		IGNORE, // UNTYPED_ARRAY // Only enforced by GStrict mode.
 		IGNORE, // UNTYPED_DICTIONARY // Only enforced by GStrict mode.
+		IGNORE, // NON_SNAKE_CASE_FUNCTION // Only enforced by GStrict mode.
 #ifndef DISABLE_DEPRECATED
 		WARN, // PROPERTY_USED_AS_FUNCTION
 		WARN, // CONSTANT_USED_AS_FUNCTION
