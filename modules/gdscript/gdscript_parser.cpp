@@ -33,6 +33,7 @@
 #include "gdscript.h"
 #include "gdscript_tokenizer_buffer.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/io/resource_loader.h"
 #include "core/math/math_defs.h"
@@ -99,6 +100,21 @@ void GDScriptParser::update_project_settings() {
 	for (int i = 0; i < GDScriptWarning::WARNING_MAX; i++) {
 		const String setting_path = GDScriptWarning::get_setting_path_from_code((GDScriptWarning::Code)i);
 		warning_levels[i] = (GDScriptWarning::WarnLevel)(int)GLOBAL_GET(setting_path);
+	}
+
+	// GStrict mode: enforcement-based rules override individual warning levels.
+	// In the editor these are benign warnings, but outside of it (runs, exports, CI)
+	// they are promoted to hard errors so no untyped code can ship.
+	if (GLOBAL_GET("debug/gdscript/gstrict/enabled").booleanize()) {
+		const GDScriptWarning::WarnLevel gstrict_level = Engine::get_singleton()->is_editor_hint() ? GDScriptWarning::WARN : GDScriptWarning::ERROR;
+		static const GDScriptWarning::Code gstrict_types[] = {
+			GDScriptWarning::UNTYPED_DECLARATION, // All functions/parameters/variables must have a static type.
+			GDScriptWarning::INFERRED_DECLARATION, // Implicitly inferred types are not allowed.
+			GDScriptWarning::INFERENCE_ON_VARIANT, // No implicit Variant.
+		};
+		for (const GDScriptWarning::Code &code : gstrict_types) {
+			warning_levels[code] = gstrict_level;
+		}
 	}
 
 #ifndef DISABLE_DEPRECATED

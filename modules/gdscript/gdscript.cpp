@@ -2880,6 +2880,10 @@ GDScriptLanguage::GDScriptLanguage() {
 
 	GLOBAL_DEF("debug/gdscript/warnings/enable", true);
 
+	// GStrict mode: forces declaration typing rules.
+	// Warnings in the editor, hard errors outside of it (runs, exports, CI).
+	GLOBAL_DEF("debug/gdscript/gstrict/enabled", false);
+
 	GLOBAL_DEF(PropertyInfo(Variant::DICTIONARY,
 					   "debug/gdscript/warnings/directory_rules",
 					   PROPERTY_HINT_TYPE_STRING,

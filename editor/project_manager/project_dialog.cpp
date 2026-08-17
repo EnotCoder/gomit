@@ -597,6 +597,7 @@ void ProjectDialog::ok_pressed() {
 		initial_settings["application/config/features"] = project_features;
 		initial_settings["application/config/name"] = project_name->get_text().strip_edges();
 		initial_settings["application/config/icon"] = "res://icon.svg";
+		initial_settings["debug/gdscript/gstrict/enabled"] = true;
 		String project_description_text = project_description->get_text().strip_edges();
 		if (!project_description_text.is_empty()) {
 			initial_settings["application/config/description"] = project_description_text;
