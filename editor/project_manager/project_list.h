@@ -52,6 +52,7 @@ class ProjectListItemControl : public HBoxContainer {
 
 	TextureRect *project_icon = nullptr;
 	Label *project_title = nullptr;
+	Label *project_description = nullptr;
 	Label *project_path = nullptr;
 	Label *last_edited_info = nullptr;
 	Label *project_version = nullptr;
@@ -107,6 +108,7 @@ protected:
 public:
 	void set_project_title(const String &p_title);
 	void set_project_path(const String &p_path);
+	void set_project_description(const String &p_description);
 	void set_tags(const PackedStringArray &p_tags, ProjectList *p_parent_list);
 	void set_project_icon(const Ref<Texture2D> &p_icon);
 	void set_last_edited_info(const String &p_info);
@@ -150,6 +152,7 @@ public:
 		MENU_SHOW_IN_FILE_MANAGER,
 		MENU_COPY_PATH,
 		MENU_RENAME,
+		MENU_EDIT_DESCRIPTION,
 		MENU_MANAGE_TAGS,
 		MENU_DUPLICATE,
 		MENU_REMOVE,

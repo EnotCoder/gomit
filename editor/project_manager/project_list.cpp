@@ -258,6 +258,18 @@ void ProjectListItemControl::set_project_path(const String &p_path) {
 	queue_accessibility_update();
 }
 
+void ProjectListItemControl::set_project_description(const String &p_description) {
+	if (p_description.is_empty()) {
+		project_description->hide();
+	} else {
+		project_description->set_text(p_description);
+		project_description->set_tooltip_text(p_description);
+		project_description->set_accessibility_name(TTRC("Project Description"));
+		project_description->show();
+	}
+	queue_accessibility_update();
+}
+
 void ProjectListItemControl::set_tags(const PackedStringArray &p_tags, ProjectList *p_parent_list) {
 	for (const String &tag : p_tags) {
 		ProjectTag *tag_control = memnew(ProjectTag(tag));
@@ -552,6 +564,16 @@ ProjectListItemControl::ProjectListItemControl() {
 		tag_container->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 		title_hb->add_child(tag_container);
 	}
+
+	project_description = memnew(Label);
+	project_description->set_name("ProjectDescription");
+	project_description->set_focus_mode(FOCUS_ACCESSIBILITY);
+	project_description->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
+	project_description->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+	project_description->set_clip_text(true);
+	project_description->set_modulate(Color(1, 1, 1, 0.5));
+	project_description->hide();
+	main_vbox->add_child(project_description);
 
 	// Bottom half, containing the path and view folder button.
 	{
@@ -1251,6 +1273,7 @@ void ProjectList::_update_project_control_translatable_fields(const Item &item) 
 	control->set_project_title(!item.missing ? item.project_name : TTR("Missing Project"));
 	control->set_last_edited_info(item.get_last_edited_string());
 	control->set_unsupported_features(item.unsupported_features.duplicate());
+	control->set_project_description(item.description);
 }
 
 void ProjectList::_toggle_project(int p_index) {
@@ -1395,6 +1418,7 @@ void ProjectList::_open_menu(const Vector2 &p_at, Control *p_hb) {
 		project_context_menu->add_item(TTRC("Copy Path"), MENU_COPY_PATH);
 		project_context_menu->add_separator();
 		project_context_menu->add_item(TTRC("Rename"), MENU_RENAME);
+		project_context_menu->add_item(TTRC("Edit Description"), MENU_EDIT_DESCRIPTION);
 		project_context_menu->add_item(TTRC("Manage Tags"), MENU_MANAGE_TAGS);
 		project_context_menu->add_item(TTRC("Duplicate"), MENU_DUPLICATE);
 		project_context_menu->add_item(TTRC("Remove from Project List"), MENU_REMOVE);
@@ -1413,6 +1437,7 @@ void ProjectList::_open_menu(const Vector2 &p_at, Control *p_hb) {
 				 MENU_SHOW_IN_FILE_MANAGER,
 #endif
 				 MENU_RENAME,
+				 MENU_EDIT_DESCRIPTION,
 				 MENU_MANAGE_TAGS,
 				 MENU_DUPLICATE }) {
 		project_context_menu->set_item_disabled(project_context_menu->get_item_index(id), clicked_project.missing);
@@ -1437,6 +1462,7 @@ void ProjectList::_update_menu_icons() {
 #endif
 	project_context_menu->set_item_icon(project_context_menu->get_item_index(MENU_COPY_PATH), get_editor_theme_icon("ActionCopy"));
 	project_context_menu->set_item_icon(project_context_menu->get_item_index(MENU_RENAME), get_editor_theme_icon("Rename"));
+	project_context_menu->set_item_icon(project_context_menu->get_item_index(MENU_EDIT_DESCRIPTION), get_editor_theme_icon("TextFile"));
 	project_context_menu->set_item_icon(project_context_menu->get_item_index(MENU_MANAGE_TAGS), get_editor_theme_icon("Script"));
 	project_context_menu->set_item_icon(project_context_menu->get_item_index(MENU_DUPLICATE), get_editor_theme_icon("Duplicate"));
 	project_context_menu->set_item_icon(project_context_menu->get_item_index(MENU_REMOVE), get_editor_theme_icon("Remove"));

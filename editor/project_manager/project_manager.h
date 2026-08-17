@@ -50,6 +50,7 @@ class ProjectList;
 class QuickSettingsDialog;
 class RichTextLabel;
 class TabContainer;
+class TextEdit;
 class VBoxContainer;
 
 class ProjectManager : public Control {
@@ -171,6 +172,7 @@ class ProjectManager : public Control {
 	Button *rename_btn = nullptr;
 	Button *duplicate_btn = nullptr;
 	Button *manage_tags_btn = nullptr;
+	Button *edit_desc_btn = nullptr;
 	Button *erase_btn = nullptr;
 	Button *erase_missing_btn = nullptr;
 
@@ -247,6 +249,15 @@ class ProjectManager : public Control {
 	void _apply_project_tags();
 	void _set_new_tag_name(const String p_name);
 	void _create_new_tag();
+
+	// Project description management.
+
+	ConfirmationDialog *description_dialog = nullptr;
+	TextEdit *description_edit = nullptr;
+	Label *description_error = nullptr;
+
+	void _edit_project_description();
+	void _apply_project_description();
 
 	// Project converter/migration tool.
 

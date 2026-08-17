@@ -68,6 +68,7 @@
 #include "scene/gui/panel_container.h"
 #include "scene/gui/rich_text_label.h"
 #include "scene/gui/separator.h"
+#include "scene/gui/text_edit.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
 #include "scene/theme/theme_db.h"
@@ -437,6 +438,10 @@ void ProjectManager::_project_list_menu_option(int p_option) {
 
 		case ProjectList::MENU_RENAME:
 			_rename_project();
+			break;
+
+		case ProjectList::MENU_EDIT_DESCRIPTION:
+			_edit_project_description();
 			break;
 
 		case ProjectList::MENU_MANAGE_TAGS:
@@ -926,6 +931,7 @@ void ProjectManager::_update_project_buttons() {
 	rename_btn->set_disabled(empty_selection || is_missing_project_selected);
 	duplicate_btn->set_disabled(empty_selection || is_missing_project_selected);
 	manage_tags_btn->set_disabled(empty_selection || is_missing_project_selected || selected_projects.size() > 1);
+	edit_desc_btn->set_disabled(empty_selection || is_missing_project_selected);
 	run_btn->set_disabled(empty_selection || is_missing_project_selected);
 
 	erase_missing_btn->set_disabled(!project_list->is_any_project_missing());
@@ -1131,6 +1137,50 @@ void ProjectManager::_apply_project_tags() {
 			tag_edit_error->set_text(vformat(TTR("Couldn't save project at '%s' (error %d)."), project_godot, err));
 			tag_edit_error->show();
 			callable_mp((Window *)tag_manage_dialog, &Window::show).call_deferred();
+			return;
+		}
+	}
+
+	_on_projects_updated();
+}
+
+void ProjectManager::_edit_project_description() {
+	const Vector<ProjectList::Item> &selected_list = project_list->get_selected_projects();
+	if (selected_list.is_empty()) {
+		return;
+	}
+
+	description_error->hide();
+	description_edit->set_text(selected_list[0].description);
+	description_dialog->popup_centered(Vector2i(500, 250) * EDSCALE);
+	description_edit->grab_focus();
+}
+
+void ProjectManager::_apply_project_description() {
+	const String description = description_edit->get_text();
+
+	const Vector<ProjectList::Item> &selected_list = project_list->get_selected_projects();
+	if (selected_list.is_empty()) {
+		return;
+	}
+
+	const String project_godot = selected_list[0].path.path_join("project.godot");
+	ProjectSettings *cfg = memnew(ProjectSettings(project_godot));
+	if (!cfg->is_project_loaded()) {
+		memdelete(cfg);
+		description_error->set_text(vformat(TTR("Couldn't load project at '%s'. It may be missing or corrupted."), project_godot));
+		description_error->show();
+		callable_mp((Window *)description_dialog, &Window::show).call_deferred(); // Make sure the dialog does not disappear.
+		return;
+	} else {
+		cfg->set("application/config/description", description);
+		Error err = cfg->save_custom(project_godot);
+		memdelete(cfg);
+
+		if (err != OK) {
+			description_error->set_text(vformat(TTR("Couldn't save project at '%s' (error %d)."), project_godot, err));
+			description_error->show();
+			callable_mp((Window *)description_dialog, &Window::show).call_deferred();
 			return;
 		}
 	}
@@ -1752,6 +1802,11 @@ ProjectManager::ProjectManager() {
 			manage_tags_btn->set_shortcut(ED_SHORTCUT("project_manager/project_tags", TTRC("Manage Tags"), KeyModifierMask::CMD_OR_CTRL | Key::T));
 			sidebar_buttons_containter->add_child(manage_tags_btn);
 
+			edit_desc_btn = memnew(Button);
+			edit_desc_btn->set_text(TTRC("Description"));
+			edit_desc_btn->set_shortcut(ED_SHORTCUT("project_manager/edit_project_description", TTRC("Edit Project Description"), KeyModifierMask::CMD_OR_CTRL | Key::D));
+			sidebar_buttons_containter->add_child(edit_desc_btn);
+
 			erase_btn = memnew(Button);
 			erase_btn->set_text(TTRC("Remove"));
 			erase_btn->set_shortcut(ED_SHORTCUT("project_manager/remove_project", TTRC("Remove Project"), Key::KEY_DELETE));
@@ -2011,6 +2066,35 @@ ProjectManager::ProjectManager() {
 		create_tag_btn->connect(SceneStringName(pressed), callable_mp((Window *)create_tag_dialog, &Window::popup_centered).bind(Vector2i(500, 0) * EDSCALE));
 
 		_set_new_tag_name("");
+	}
+
+	// Project description.
+	{
+		description_dialog = memnew(ConfirmationDialog);
+		add_child(description_dialog);
+		description_dialog->set_title(TTRC("Edit Project Description"));
+		description_dialog->set_ok_button_text(TTRC("Save"));
+		description_dialog->get_ok_button()->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_apply_project_description));
+		edit_desc_btn->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_edit_project_description));
+
+		VBoxContainer *desc_vb = memnew(VBoxContainer);
+		description_dialog->add_child(desc_vb);
+
+		Label *label = memnew(Label(TTRC("Description")));
+		desc_vb->add_child(label);
+		label->set_theme_type_variation("HeaderMedium");
+		label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER);
+
+		description_edit = memnew(TextEdit);
+		desc_vb->add_child(description_edit);
+		description_edit->set_name("ProjectDescriptionEdit");
+		description_edit->set_custom_minimum_size(Vector2(0, 150) * EDSCALE);
+		description_edit->set_v_size_flags(Control::SIZE_EXPAND_FILL);
+		description_edit->set_accessibility_name(TTRC("Project Description"));
+
+		description_error = memnew(Label);
+		desc_vb->add_child(description_error);
+		description_error->set_autowrap_mode(TextServer::AUTOWRAP_WORD);
 	}
 
 	// Initialize project list.

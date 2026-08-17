@@ -49,6 +49,7 @@
 #include "scene/gui/link_button.h"
 #include "scene/gui/option_button.h"
 #include "scene/gui/separator.h"
+#include "scene/gui/text_edit.h"
 #include "scene/gui/texture_rect.h"
 #include "servers/display/display_server.h"
 #include "servers/rendering/rendering_server.h"
@@ -596,6 +597,10 @@ void ProjectDialog::ok_pressed() {
 		initial_settings["application/config/features"] = project_features;
 		initial_settings["application/config/name"] = project_name->get_text().strip_edges();
 		initial_settings["application/config/icon"] = "res://icon.svg";
+		String project_description_text = project_description->get_text().strip_edges();
+		if (!project_description_text.is_empty()) {
+			initial_settings["application/config/description"] = project_description_text;
+		}
 		ProjectSettings::CustomMap extra_settings = EditorNode::get_initial_settings();
 		for (const KeyValue<String, Variant> &extra_setting : extra_settings) {
 			// Merge with other initial settings defined above.
@@ -870,6 +875,7 @@ void ProjectDialog::show_dialog(bool p_reset_name, bool p_is_confirmed) {
 		edit_check_box->hide();
 
 		name_container->show();
+		description_container->hide();
 		install_path_container->hide();
 		renderer_container->hide();
 		default_files_container->hide();
@@ -911,6 +917,7 @@ void ProjectDialog::show_dialog(bool p_reset_name, bool p_is_confirmed) {
 			set_ok_button_text(TTRC("Import"));
 
 			name_container->hide();
+			description_container->hide();
 			install_path_container->hide();
 			renderer_container->hide();
 			default_files_container->hide();
@@ -939,10 +946,13 @@ void ProjectDialog::show_dialog(bool p_reset_name, bool p_is_confirmed) {
 			}
 
 			name_container->show();
+			description_container->show();
 			install_path_container->hide();
 			renderer_container->show();
 			default_files_container->show();
 			edit_check_box->hide();
+
+			project_description->set_text("");
 
 			callable_mp((Control *)project_name, &Control::grab_focus).call_deferred(false);
 			callable_mp(project_name, &LineEdit::select_all).call_deferred();
@@ -953,6 +963,7 @@ void ProjectDialog::show_dialog(bool p_reset_name, bool p_is_confirmed) {
 			project_name->set_text(zip_title);
 
 			name_container->show();
+			description_container->hide();
 			install_path_container->hide();
 			renderer_container->hide();
 			default_files_container->hide();
@@ -964,6 +975,7 @@ void ProjectDialog::show_dialog(bool p_reset_name, bool p_is_confirmed) {
 			set_ok_button_text(TTRC("Duplicate"));
 
 			name_container->show();
+			description_container->hide();
 			install_path_container->hide();
 			renderer_container->hide();
 			default_files_container->hide();
@@ -1033,6 +1045,20 @@ ProjectDialog::ProjectDialog() {
 	project_name->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	project_name->set_accessibility_name(TTRC("Project Name:"));
 	name_container->add_child(project_name);
+
+	description_container = memnew(VBoxContainer);
+	vb->add_child(description_container);
+
+	l = memnew(Label);
+	l->set_text(TTRC("Description:"));
+	description_container->add_child(l);
+
+	project_description = memnew(TextEdit);
+	project_description->set_virtual_keyboard_show_on_focus(false);
+	project_description->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+	project_description->set_custom_minimum_size(Vector2(0, 60) * EDSCALE);
+	project_description->set_accessibility_name(TTRC("Description:"));
+	description_container->add_child(project_description);
 
 	project_path_container = memnew(VBoxContainer);
 	vb->add_child(project_path_container);

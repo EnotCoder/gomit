@@ -38,6 +38,7 @@ class CheckButton;
 class EditorFileDialog;
 class LineEdit;
 class OptionButton;
+class TextEdit;
 class TextureRect;
 
 class ProjectDialog : public ConfirmationDialog {
@@ -78,6 +79,7 @@ private:
 	Button *project_browse = nullptr;
 	Button *install_browse = nullptr;
 	VBoxContainer *name_container = nullptr;
+	VBoxContainer *description_container = nullptr;
 	VBoxContainer *project_path_container = nullptr;
 	VBoxContainer *install_path_container = nullptr;
 
@@ -91,6 +93,7 @@ private:
 
 	Label *msg = nullptr;
 	LineEdit *project_name = nullptr;
+	TextEdit *project_description = nullptr;
 	LineEdit *project_path = nullptr;
 	LineEdit *install_path = nullptr;
 	TextureRect *project_status_rect = nullptr;
